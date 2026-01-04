@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
+import 'package:mad_final_project/network/auth_service.dart';
 import 'package:mad_final_project/utils/constants.dart';
 
 class SignupPage extends StatefulWidget {
@@ -16,8 +17,10 @@ class _SignupPageState extends State<SignupPage> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _authService = AuthService();
   String _phoneNumber = '';
   bool _obscurePassword = true;
+  bool _isLoading = false;
   String? _errorMessage;
 
   @override
@@ -28,35 +31,79 @@ class _SignupPageState extends State<SignupPage> {
     super.dispose();
   }
 
-  void _handleSignup() {
+  Future<void> _handleSignup() async {
     setState(() {
       _errorMessage = null;
+      _isLoading = true;
     });
 
     if (_formKey.currentState!.validate()) {
       if (_phoneNumber.isEmpty) {
         setState(() {
           _errorMessage = 'Please enter a valid phone number';
+          _isLoading = false;
         });
         return;
       }
 
-      // Simulate signup validation
-      if (_emailController.text == 'test@test.com') {
+      try {
+        // Call API with email and password (API only accepts these 2 fields)
+        final result = await _authService.signup(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
+
         setState(() {
-          _errorMessage = 'This email is already registered';
+          _isLoading = false;
         });
-        return;
-      }
 
-      // Success - navigate to login
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Account created successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      Navigator.pushReplacementNamed(context, 'login');
+        if (result['success'] == true) {
+          // Show success message
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.white),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        result['message'] ?? 'Account created successfully!',
+                        style: GoogleFonts.manrope(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 3),
+                behavior: SnackBarBehavior.floating,
+                margin: EdgeInsets.all(16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            );
+            // Navigate to login page
+            Navigator.pushReplacementNamed(context, 'login');
+          }
+        } else {
+          setState(() {
+            _errorMessage = result['message'] ?? 'Signup failed. Please try again.';
+          });
+        }
+      } catch (e) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'An unexpected error occurred: $e';
+        });
+      }
+    } else {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
@@ -335,15 +382,24 @@ class _SignupPageState extends State<SignupPage> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: TextButton(
-                    onPressed: _handleSignup,
-                    child: Text(
-                      "Sign Up",
-                      style: GoogleFonts.manrope(
-                        textStyle: AppTextStyles.semiBold,
-                        fontSize: 16.sp,
-                        color: AppColors.white,
-                      ),
-                    ),
+                    onPressed: _isLoading ? null : _handleSignup,
+                    child: _isLoading
+                        ? SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : Text(
+                            "Sign Up",
+                            style: GoogleFonts.manrope(
+                              textStyle: AppTextStyles.semiBold,
+                              fontSize: 16.sp,
+                              color: AppColors.white,
+                            ),
+                          ),
                   ),
                 ),
                 AppSpacing.md,

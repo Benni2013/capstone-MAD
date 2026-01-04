@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:mad_final_project/network/auth_service.dart';
 
 import '../../utils/constants.dart';
 
@@ -15,7 +16,9 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _authService = AuthService();
   bool _obscurePassword = true;
+  bool _isLoading = false;
   String? _errorMessage;
 
   @override
@@ -25,28 +28,70 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  void _handleLogin() {
+  Future<void> _handleLogin() async {
     setState(() {
       _errorMessage = null;
+      _isLoading = true;
     });
 
     if (_formKey.currentState!.validate()) {
-      // Simulate login validation
-      if (_emailController.text != 'user@example.com' || _passwordController.text != 'password123') {
-        setState(() {
-          _errorMessage = 'Invalid email or password';
-        });
-        return;
-      }
+      try {
+        final result = await _authService.login(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
 
-      // Success - navigate to home
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Login successful!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      Navigator.pushReplacementNamed(context, 'home');
+        setState(() {
+          _isLoading = false;
+        });
+
+        if (result['success'] == true) {
+          // Show success message
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.white),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        result['message'] ?? 'Login successful!',
+                        style: GoogleFonts.manrope(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 2),
+                behavior: SnackBarBehavior.floating,
+                margin: EdgeInsets.all(16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            );
+            // Navigate to home
+            Navigator.pushReplacementNamed(context, 'home');
+          }
+        } else {
+          setState(() {
+            _errorMessage = result['message'] ?? 'Invalid email or password';
+          });
+        }
+      } catch (e) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'An unexpected error occurred: $e';
+        });
+      }
+    } else {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
@@ -235,15 +280,24 @@ class _LoginPageState extends State<LoginPage> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: TextButton(
-                    onPressed: _handleLogin,
-                    child: Text(
-                      "Sign In",
-                      style: GoogleFonts.manrope(
-                        textStyle: AppTextStyles.semiBold,
-                        fontSize: 16.sp,
-                        color: AppColors.white,
-                      ),
-                    ),
+                    onPressed: _isLoading ? null : _handleLogin,
+                    child: _isLoading
+                        ? SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : Text(
+                            "Sign In",
+                            style: GoogleFonts.manrope(
+                              textStyle: AppTextStyles.semiBold,
+                              fontSize: 16.sp,
+                              color: AppColors.white,
+                            ),
+                          ),
                   ),
                 ),
                 AppSpacing.sm,

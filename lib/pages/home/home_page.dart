@@ -75,6 +75,7 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         backgroundColor: AppColorsLight.primary,
         elevation: 0,
+        automaticallyImplyLeading: false,
         title: Row(
           children: [
             Icon(Icons.home_work, color: Colors.white, size: 28),

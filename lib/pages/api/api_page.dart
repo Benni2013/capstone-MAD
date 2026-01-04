@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mad_final_project/network/api_service.dart';
+import 'package:mad_final_project/network/auth_service.dart';
 import 'package:mad_final_project/utils/constants.dart';
 
 class ApiIntegrationPage extends StatefulWidget {
@@ -13,13 +14,17 @@ class ApiIntegrationPage extends StatefulWidget {
 
 class _ApiIntegrationPageState extends State<ApiIntegrationPage> {
   bool isLoading = false;
+  bool isLoadingHealth = false;
   List<dynamic> apiData = [];
+  Map<String, dynamic>? healthData;
   String? error;
+  String? healthError;
 
   @override
   void initState() {
     super.initState();
     _fetchData();
+    _checkHealth();
   }
 
   Future<void> _fetchData() async {
@@ -38,6 +43,30 @@ class _ApiIntegrationPageState extends State<ApiIntegrationPage> {
       setState(() {
         error = e.toString();
         isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _checkHealth() async {
+    setState(() {
+      isLoadingHealth = true;
+      healthError = null;
+    });
+
+    try {
+      final result = await AuthService().checkHealth();
+      setState(() {
+        if (result['success'] == true) {
+          healthData = result['data'];
+        } else {
+          healthError = result['message'];
+        }
+        isLoadingHealth = false;
+      });
+    } catch (e) {
+      setState(() {
+        healthError = e.toString();
+        isLoadingHealth = false;
       });
     }
   }
@@ -61,179 +90,193 @@ class _ApiIntegrationPageState extends State<ApiIntegrationPage> {
         ),
       ),
       body: RefreshIndicator(
-        onRefresh: _fetchData,
-        child: isLoading
-            ? Center(
+        onRefresh: () async {
+          await _fetchData();
+          await _checkHealth();
+        },
+        child: SingleChildScrollView(
+          physics: AlwaysScrollableScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // API Health Status Card
+              Container(
+                margin: EdgeInsets.all(16.w),
+                padding: EdgeInsets.all(16.w),
+                decoration: BoxDecoration(
+                  color: healthData != null ? Colors.green[50] : Colors.orange[50],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: healthData != null ? Colors.green : Colors.orange,
+                    width: 1,
+                  ),
+                ),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    CircularProgressIndicator(
-                      color: AppColorsLight.primary,
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.health_and_safety,
+                          color: healthData != null ? Colors.green : Colors.orange,
+                          size: 24,
+                        ),
+                        SizedBox(width: 12.w),
+                        Text(
+                          'API Health Status',
+                          style: GoogleFonts.manrope(
+                            fontSize: 18.sp,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.grayScale,
+                          ),
+                        ),
+                      ],
                     ),
-                    SizedBox(height: 16.h),
-                    Text(
-                      'Loading data...',
-                      style: GoogleFonts.manrope(
-                        fontSize: 16.sp,
-                        color: Colors.grey[600],
+                    SizedBox(height: 12.h),
+                    if (isLoadingHealth)
+                      Center(child: CircularProgressIndicator())
+                    else if (healthError != null)
+                      Text(
+                        'Error: $healthError',
+                        style: GoogleFonts.manrope(
+                          fontSize: 14.sp,
+                          color: Colors.red,
+                        ),
+                      )
+                    else if (healthData != null) ...[
+                      _buildHealthInfo('Status', healthData!['status'] ?? 'N/A'),
+                      SizedBox(height: 8.h),
+                      _buildHealthInfo('Timestamp', healthData!['timestamp'] ?? 'N/A'),
+                      SizedBox(height: 8.h),
+                      _buildHealthInfo(
+                        'Uptime',
+                        '${((healthData!['uptimeMs'] ?? 0) / 1000 / 60).toStringAsFixed(0)} minutes',
                       ),
-                    ),
+                    ],
                   ],
                 ),
-              )
-            : error != null
-                ? Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(24.w),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.error_outline,
-                            size: 64,
-                            color: Colors.red,
-                          ),
-                          SizedBox(height: 16.h),
-                          Text(
-                            'Error loading data',
+              ),
+
+              // Sample Data Section
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.w),
+                child: Text(
+                  'Sample External API Data',
+                  style: GoogleFonts.manrope(
+                    fontSize: 18.sp,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.grayScale,
+                  ),
+                ),
+              ),
+              SizedBox(height: 8.h),
+
+              if (isLoading)
+                Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(32.h),
+                    child: CircularProgressIndicator(
+                      color: AppColorsLight.primary,
+                    ),
+                  ),
+                )
+              else if (error != null)
+                Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24.w),
+                    child: Column(
+                      children: [
+                        Icon(Icons.error_outline, size: 48, color: Colors.red),
+                        SizedBox(height: 16.h),
+                        Text(
+                          'Error: $error',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.manrope(fontSize: 14.sp),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: NeverScrollableScrollPhysics(),
+                  padding: EdgeInsets.all(16.w),
+                  itemCount: apiData.length,
+                  itemBuilder: (context, index) {
+                    final item = apiData[index];
+                    return Card(
+                      margin: EdgeInsets.only(bottom: 12.h),
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: ListTile(
+                        contentPadding: EdgeInsets.all(16.w),
+                        leading: CircleAvatar(
+                          backgroundColor: AppColorsLight.primary,
+                          child: Text(
+                            '${item['id']}',
                             style: GoogleFonts.manrope(
-                              fontSize: 18.sp,
+                              color: Colors.white,
                               fontWeight: FontWeight.bold,
-                              color: AppColors.grayScale,
                             ),
                           ),
-                          SizedBox(height: 8.h),
-                          Text(
-                            error!,
-                            textAlign: TextAlign.center,
+                        ),
+                        title: Text(
+                          item['title'] ?? 'No title',
+                          style: GoogleFonts.manrope(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16.sp,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Padding(
+                          padding: EdgeInsets.only(top: 8.h),
+                          child: Text(
+                            item['body'] ?? 'No description',
                             style: GoogleFonts.manrope(
                               fontSize: 14.sp,
                               color: Colors.grey[600],
                             ),
-                          ),
-                          SizedBox(height: 24.h),
-                          ElevatedButton(
-                            onPressed: _fetchData,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColorsLight.primary,
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 32.w,
-                                vertical: 12.h,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: Text(
-                              'Retry',
-                              style: GoogleFonts.manrope(
-                                fontSize: 16.sp,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                : apiData.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No data available',
-                          style: GoogleFonts.manrope(
-                            fontSize: 16.sp,
-                            color: Colors.grey[600],
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                      )
-                    : ListView.builder(
-                        padding: EdgeInsets.all(16.w),
-                        itemCount: apiData.length,
-                        itemBuilder: (context, index) {
-                          final item = apiData[index];
-                          return Card(
-                            margin: EdgeInsets.only(bottom: 16.h),
-                            elevation: 2,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Padding(
-                              padding: EdgeInsets.all(16.w),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Container(
-                                        width: 40.w,
-                                        height: 40.h,
-                                        decoration: BoxDecoration(
-                                          color: AppColorsLight.primary
-                                              .withOpacity(0.1),
-                                          borderRadius:
-                                              BorderRadius.circular(8),
-                                        ),
-                                        child: Center(
-                                          child: Text(
-                                            '${item['id']}',
-                                            style: GoogleFonts.manrope(
-                                              fontSize: 16.sp,
-                                              fontWeight: FontWeight.bold,
-                                              color: AppColorsLight.primary,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      SizedBox(width: 12.w),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              item['title'] ?? 'No Title',
-                                              style: GoogleFonts.manrope(
-                                                fontSize: 16.sp,
-                                                fontWeight: FontWeight.w600,
-                                                color: AppColors.grayScale,
-                                              ),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            SizedBox(height: 4.h),
-                                            Text(
-                                              'User ID: ${item['userId']}',
-                                              style: GoogleFonts.manrope(
-                                                fontSize: 12.sp,
-                                                color: Colors.grey[600],
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  if (item['body'] != null) ...[
-                                    SizedBox(height: 12.h),
-                                    Text(
-                                      item['body'],
-                                      style: GoogleFonts.manrope(
-                                        fontSize: 14.sp,
-                                        color: Colors.grey[700],
-                                        height: 1.5,
-                                      ),
-                                      maxLines: 3,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          );
-                        },
                       ),
+                    );
+                  },
+                ),
+            ],
+          ),
+        ),
       ),
+    );
+  }
+
+  Widget _buildHealthInfo(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '$label: ',
+          style: GoogleFonts.manrope(
+            fontSize: 14.sp,
+            fontWeight: FontWeight.w600,
+            color: AppColors.grayScale,
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: GoogleFonts.manrope(
+              fontSize: 14.sp,
+              color: Colors.grey[700],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
